@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tagboard AI v20 (The Glitch Fix)</title>
+    <title>Tagboard AI v25 (Full Hierarchy)</title>
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#4f46e5"/>
     <meta name="description" content="A simple tool to manage and copy tags for your projects.">
@@ -26,9 +26,14 @@
         }
         .delete-btn { transition: opacity 0.2s ease-in-out; }
         #selection-preview { white-space: pre-wrap; word-break: break-word; }
-        .drag-handle { cursor: grab; }
+        .drag-handle, .category-header-title { cursor: grab; }
+        .item-wrapper { cursor: grab; }
         .sortable-ghost { opacity: 0.4; background: #c7d2fe; }
         .sub-category { border-left: 3px solid #6366f1; }
+        .collapsible-content {
+            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.3s ease-in-out;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 min-h-screen p-4">
@@ -71,10 +76,17 @@
     <div id="toast" class="copied-toast hidden fixed bottom-5 right-5 bg-green-500 text-white font-bold py-2 px-4 rounded-lg shadow-xl"></div>
 
     <script>
-        // --- Service Worker Logic ---
-        const CACHE_NAME = 'tagboard-v20';
+        // --- Service Worker Logic (for Glitch PWA) ---
+        const serviceWorkerCode = `
+            const CACHE_NAME = 'tagboard-v22-cache';
+            self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(['/']))) });
+            self.addEventListener('fetch', e => { e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))) });
+        `;
+        const swBlob = new Blob([serviceWorkerCode], {type: 'application/javascript'});
+        const swUrl = URL.createObjectURL(swBlob);
+
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/service-worker.js').catch(err => console.log('SW reg failed: ', err));
+            navigator.serviceWorker.register(swUrl).catch(err => console.log('SW registration failed: ', err));
         }
         
         // --- Main Application Logic ---
@@ -94,29 +106,32 @@
         let categories = [];
         let sortableInstances = [];
 
-        const unicodeToBase64 = (str) => btoa(unescape(encodeURIComponent(str)));
-        const base64ToUnicode = (str) => decodeURIComponent(escape(atob(str)));
+        function unicodeToBase64(str) { return btoa(unescape(encodeURIComponent(str))); }
+        function base64ToUnicode(str) { return decodeURIComponent(escape(atob(str))); }
 
-        // NEW: The single source of truth for all data changes.
-        const commit = (callback) => {
-            if (callback) {
-                callback(categories); // Perform mutation on the categories array
-            }
+        function commit(callback) {
+            if (callback) { callback(categories); }
             if (!isReadOnly) {
                 localStorage.setItem('tagboardCategories', JSON.stringify(categories));
             }
-            render(); // Always re-render after a state change
-        };
+            render();
+        }
         
-        const render = () => {
+        function render() {
             sortableInstances.forEach(s => s.destroy());
             sortableInstances = [];
             categoryContainer.innerHTML = '';
             
             categories.forEach((category, categoryIndex) => {
+                const isCollapsed = category.isCollapsed || false;
                 const categoryCard = document.createElement('div');
                 categoryCard.className = 'category-card bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6';
                 categoryCard.dataset.id = `category-${categoryIndex}`;
+                
+                const cardHeader = getCategoryHeaderHTML(category, categoryIndex);
+                
+                const cardBody = document.createElement('div');
+                cardBody.className = `collapsible-content ${isCollapsed ? 'max-h-0 opacity-0 mt-0' : 'max-h-[10000px] mt-4'}`;
                 
                 const itemsContainer = document.createElement('div');
                 itemsContainer.className = 'category-items-container space-y-4';
@@ -130,19 +145,20 @@
                     }
                 });
 
-                categoryCard.innerHTML = getCategoryHeaderHTML(category, categoryIndex);
-                categoryCard.appendChild(itemsContainer);
+                cardBody.appendChild(itemsContainer);
                 if (!isReadOnly) {
-                    categoryCard.insertAdjacentHTML('beforeend', getCategoryFooterHTML(categoryIndex));
+                    cardBody.insertAdjacentHTML('beforeend', getCategoryFooterHTML(categoryIndex));
                 }
                 
+                categoryCard.innerHTML = cardHeader;
+                categoryCard.appendChild(cardBody);
                 categoryContainer.appendChild(categoryCard);
             });
             
             initSortable();
-        };
+        }
         
-        const createTagElement = (catIndex, subCatIndex, itemIndex) => {
+        function createTagElement(catIndex, subCatIndex, itemIndex) {
             const tagValue = (subCatIndex > -1) ? categories[catIndex].items[subCatIndex].tags[itemIndex] : categories[catIndex].items[itemIndex].value;
             const wrapper = document.createElement('div');
             wrapper.className = 'relative group inline-block mr-3 mb-3 item-wrapper';
@@ -160,9 +176,9 @@
                                         onclick="deleteItem(${catIndex}, ${subCatIndex}, ${itemIndex})">x</button>` : ''}
             `;
             return wrapper;
-        };
+        }
         
-        const createSubCategoryElement = (catIndex, subCatIndex) => {
+        function createSubCategoryElement(catIndex, subCatIndex) {
             const subCategory = categories[catIndex].items[subCatIndex];
             const subCategoryCard = document.createElement('div');
             subCategoryCard.className = 'sub-category bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg ml-4 item-wrapper';
@@ -173,7 +189,7 @@
             subCategoryCard.innerHTML = `
                 <div class="flex justify-between items-center mb-2">
                     <h4 class="font-semibold text-lg text-gray-700 dark:text-gray-300">${subCategory.name}</h4>
-                     ${!isReadOnly ? `<button class="delete-btn text-red-500 hover:text-red-700 font-bold" onclick="deleteItem(${catIndex}, ${subCatIndex})">✕</button>` : ''}
+                     ${!isReadOnly ? `<button class="delete-btn text-red-500 hover:text-red-700 font-bold" onclick="deleteItem(${catIndex}, ${subCatIndex}, -1)">✕</button>` : ''}
                 </div>
                 <div class="flex flex-wrap gap-2">${tagsHtml}</div>
                  ${!isReadOnly ? `
@@ -184,9 +200,11 @@
                 ` : ''}
             `;
             return subCategoryCard;
-        };
+        }
 
-        const getCategoryHeaderHTML = (category, categoryIndex) => {
+        function getCategoryHeaderHTML(category, categoryIndex) {
+             const isCollapsed = category.isCollapsed || false;
+             const chevronRotation = isCollapsed ? 'transform rotate-[-90deg]' : '';
              const headerTitleContent = !isReadOnly
                 ? `<div id="category-title-view-${categoryIndex}" class="flex items-center gap-2">
                         <h3 class="text-2xl font-bold text-gray-900 dark:text-white">${category.name}</h3>
@@ -203,16 +221,19 @@
                     </div>`
                 : `<h3 class="text-2xl font-bold text-gray-900 dark:text-white">${category.name}</h3>`;
 
-            return `<div class="flex justify-between items-center mb-4">
-                        <div class="flex items-center gap-2 flex-grow">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="${isReadOnly ? '' : 'drag-handle'} text-gray-400"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
-                            <div class="w-full">${headerTitleContent}</div>
+            return `<div class="flex justify-between items-center mb-0">
+                        <div class="flex items-center gap-2 flex-grow category-header-title" onclick="toggleCategoryCollapse(${categoryIndex})">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-gray-400 transition-transform ${chevronRotation}"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                             <div class="w-full">${headerTitleContent}</div>
                         </div>
-                        ${!isReadOnly ? `<button class="delete-btn bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full text-sm font-bold" onclick="deleteCategory(${categoryIndex})">✕</button>` : ''}
+                        <div class="flex items-center gap-2">
+                            ${!isReadOnly ? `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="drag-handle text-gray-400"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>` : ''}
+                            ${!isReadOnly ? `<button class="delete-btn bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full text-sm font-bold" onclick="deleteCategory(${categoryIndex})">✕</button>` : ''}
+                        </div>
                     </div>`;
-        };
+        }
         
-        const getCategoryFooterHTML = (categoryIndex) => {
+        function getCategoryFooterHTML(categoryIndex) {
             return `<div class="pt-4 border-t border-gray-200 dark:border-gray-700 mt-4 space-y-3">
                         <div class="flex gap-2">
                             <input type="text" id="new-tag-input-${categoryIndex}" class="flex-grow bg-gray-50 dark:bg-gray-700 border rounded-lg p-2" placeholder="Add a top-level tag...">
@@ -223,50 +244,44 @@
                             <button class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg" onclick="addSubCategory(${categoryIndex})">Add Sub-Category</button>
                         </div>
                     </div>`;
-        };
+        }
         
-        const initSortable = () => {
+        function initSortable() {
             if (isReadOnly) return;
-
-            const mainSortable = new Sortable(categoryContainer, {
+            new Sortable(categoryContainer, {
                 animation: 150, handle: '.drag-handle', ghostClass: 'sortable-ghost',
-                onEnd: (evt) => {
-                    commit(cats => {
-                        const item = cats.splice(evt.oldIndex, 1)[0];
-                        cats.splice(evt.newIndex, 0, item);
-                    });
-                },
+                onEnd: (evt) => commit(cats => {
+                    const item = cats.splice(evt.oldIndex, 1)[0];
+                    cats.splice(evt.newIndex, 0, item);
+                }),
             });
-            sortableInstances.push(mainSortable);
-
             document.querySelectorAll('.category-items-container').forEach(container => {
                 const catIndex = parseInt(container.dataset.id.split('-')[2]);
-                const itemSortable = new Sortable(container, {
-                    group: 'shared', animation: 150, ghostClass: 'sortable-ghost',
-                    onEnd: (evt) => {
-                         commit(cats => {
-                            const item = cats[catIndex].items.splice(evt.oldIndex, 1)[0];
-                            cats[catIndex].items.splice(evt.newIndex, 0, item);
-                        });
-                    }
+                new Sortable(container, {
+                    group: 'shared', animation: 150, ghostClass: 'sortable-ghost', handle: '.item-wrapper',
+                    onEnd: (evt) => commit(cats => {
+                        const fromCatIndex = parseInt(evt.from.dataset.id.split('-')[2]);
+                        const toCatIndex = parseInt(evt.to.dataset.id.split('-')[2]);
+                        const item = cats[fromCatIndex].items.splice(evt.oldIndex, 1)[0];
+                        cats[toCatIndex].items.splice(evt.newIndex, 0, item);
+                    }),
                 });
-                sortableInstances.push(itemSortable);
             });
-        };
+        }
         
-        const getFullTagValue = (catIndex, subCatIndex, tagValue) => {
+        function getFullTagValue(catIndex, subCatIndex, tagValue) {
             if (subCatIndex > -1) {
-                const subCatName = categories[catIndex].items[subCatIndex].name;
-                return `${subCatName.toUpperCase()} / ${tagValue}`;
-            }
+                const mainCatName = categories[catIndex].name.toUpperCase();
+                const subCatName = categories[catIndex].items[subCatIndex].name.toUpperCase();
+                return `${mainCatName} / ${subCatName} / ${tagValue}`;
+            } 
             return tagValue;
-        };
+        }
         
-        const toggleTagSelection = (catIndex, subCatIndex, itemIndex, buttonElement) => {
+        function toggleTagSelection(catIndex, subCatIndex, itemIndex, buttonElement) {
             const tagValue = (subCatIndex > -1) ? categories[catIndex].items[subCatIndex].tags[itemIndex] : categories[catIndex].items[itemIndex].value;
             const fullValue = getFullTagValue(catIndex, subCatIndex, tagValue);
             const tagIndexInSelection = selectedTags.findIndex(st => st.fullValue === fullValue);
-
             if (tagIndexInSelection > -1) {
                 selectedTags.splice(tagIndexInSelection, 1);
                 buttonElement.classList.remove('selected');
@@ -275,121 +290,108 @@
                 buttonElement.classList.add('selected');
             }
             updateSelectionPreview();
-        };
+        }
 
-        const copySelectedTags = () => {
-            if (selectedTags.length === 0) return;
-            const textToCopy = selectedTags.map(t => t.fullValue).join('\n');
-            copyStringToClipboard(textToCopy, 'Copied tags!');
-        };
-        
-        const addTagToCategory = (categoryIndex) => {
-            const input = document.getElementById(`new-tag-input-${categoryIndex}`);
+        function toggleCategoryCollapse(categoryIndex) {
+            commit(cats => {
+                cats[categoryIndex].isCollapsed = !cats[categoryIndex].isCollapsed;
+            });
+        }
+
+        function addCategory() {
+            const categoryName = newCategoryInput.value.trim();
+            if (!categoryName) return;
+            if (categories.some(c => c.name.toLowerCase() === categoryName.toLowerCase())) {
+                alert('A category with this name already exists.'); return;
+            }
+            commit(cats => {
+                cats.push({ name: categoryName, items: [], isCollapsed: false });
+                newCategoryInput.value = '';
+            });
+        }
+
+        function addTagToCategory(catIndex) {
+            const input = document.getElementById(`new-tag-input-${catIndex}`);
             const tagValue = input.value.trim();
-            if (tagValue) {
-                commit(cats => {
-                    cats[categoryIndex].items.push({ type: 'tag', value: tagValue });
-                    input.value = '';
-                });
-            }
-        };
-
-        const addSubCategory = (categoryIndex) => {
-            const input = document.getElementById(`new-subcategory-input-${categoryIndex}`);
+            if(tagValue) commit(cats => {
+                cats[catIndex].items.push({ type: 'tag', value: tagValue });
+                input.value = '';
+            });
+        }
+        function addSubCategory(catIndex) {
+            const input = document.getElementById(`new-subcategory-input-${catIndex}`);
             const subCatName = input.value.trim();
-            if (subCatName) {
-                commit(cats => {
-                    cats[categoryIndex].items.push({ type: 'subCategory', name: subCatName, tags: [] });
-                    input.value = '';
-                });
-            }
-        };
-
-        const addTagToSubCategory = (catIndex, subCatIndex) => {
+            if(subCatName) commit(cats => {
+                cats[catIndex].items.push({ type: 'subCategory', name: subCatName, tags: [] });
+                input.value = '';
+            });
+        }
+        function addTagToSubCategory(catIndex, subCatIndex) {
             const input = document.getElementById(`new-tag-input-${catIndex}-${subCatIndex}`);
             const tagValue = input.value.trim();
-            if (tagValue) {
-                commit(cats => {
-                    cats[catIndex].items[subCatIndex].tags.push(tagValue);
-                    input.value = '';
-                });
-            }
-        };
-
-        const deleteItem = (catIndex, subCatIndex, itemIndex) => {
-            if (subCatIndex > -1) {
-                commit(cats => {
-                    cats[catIndex].items[subCatIndex].tags.splice(itemIndex, 1);
-                });
-            } else {
-                const item = categories[catIndex].items[itemIndex];
+            if(tagValue) commit(cats => {
+                cats[catIndex].items[subCatIndex].tags.push(tagValue);
+                input.value = '';
+            });
+        }
+        function deleteItem(catIndex, subCatIndex, itemIndex) {
+            if (subCatIndex > -1 && itemIndex > -1) { // It's a tag within a sub-category
+                commit(cats => cats[catIndex].items[subCatIndex].tags.splice(itemIndex, 1));
+            } else { // It's a top-level item (tag or sub-category)
+                const realItemIndex = subCatIndex > -1 ? subCatIndex : itemIndex;
+                const item = categories[catIndex].items[realItemIndex];
                 if (item.type === 'subCategory' && !confirm(`Delete sub-category "${item.name}" and all its tags?`)) return;
-                commit(cats => {
-                    cats[catIndex].items.splice(itemIndex, 1);
-                });
+                commit(cats => cats[catIndex].items.splice(realItemIndex, 1));
             }
             clearSelection();
-        };
-        
-        const showCategoryEditView = (categoryIndex) => {
+        }
+        function saveCategoryName(categoryIndex) {
+            const input = document.getElementById(`category-edit-input-${categoryIndex}`);
+            const newName = input.value.trim();
+            if (newName && newName !== categories[categoryIndex].name) {
+                if (categories.some((c, i) => i !== categoryIndex && c.name.toLowerCase() === newName.toLowerCase())) {
+                    alert('A category with this name already exists.'); return;
+                }
+                commit(cats => { cats[categoryIndex].name = newName; });
+            } else { hideCategoryEditView(categoryIndex); }
+        }
+        function deleteCategory(categoryIndex) {
+            if (!confirm(`Delete "${categories[categoryIndex].name}" category and all its contents?`)) return;
+            commit(cats => cats.splice(categoryIndex, 1));
+            clearSelection();
+        }
+
+        function updateSelectionPreview() {
+            selectionPreview.textContent = selectedTags.length > 0 ? selectedTags.map(t => t.fullValue).join(', ') : 'No tags selected.';
+        }
+        function clearSelection() {
+            selectedTags = [];
+            render(); // Re-render to deselect buttons
+            updateSelectionPreview();
+        }
+        function showCategoryEditView(categoryIndex) {
             document.getElementById(`category-title-view-${categoryIndex}`).classList.add('hidden');
             document.getElementById(`category-edit-view-${categoryIndex}`).classList.remove('hidden');
             const input = document.getElementById(`category-edit-input-${categoryIndex}`);
             input.focus(); input.select();
-        };
-        const hideCategoryEditView = (categoryIndex) => {
+        }
+        function hideCategoryEditView(categoryIndex) {
             document.getElementById(`category-title-view-${categoryIndex}`).classList.remove('hidden');
             document.getElementById(`category-edit-view-${categoryIndex}`).classList.add('hidden');
-        };
-        const saveCategoryName = (categoryIndex) => {
-            const input = document.getElementById(`category-edit-input-${categoryIndex}`);
-            const newName = input.value.trim();
-            if (newName && newName !== categories[categoryIndex].name) {
-                 if (categories.some((c, i) => i !== categoryIndex && c.name.toLowerCase() === newName.toLowerCase())) {
-                    alert('A category with this name already exists.'); return;
-                }
-                commit(cats => {
-                    cats[categoryIndex].name = newName;
-                });
-            } else { 
-                hideCategoryEditView(categoryIndex); 
-            }
-        };
-        const updateSelectionPreview = () => {
-            selectionPreview.textContent = selectedTags.length > 0 ? selectedTags.map(t => t.fullValue).join('\n') : 'No tags selected.';
-        };
-        const clearSelection = () => {
-            selectedTags = [];
-            commit(); // Re-render to deselect buttons
-            updateSelectionPreview();
-        };
-        const addCategory = () => {
-            const categoryName = newCategoryInput.value.trim();
-            if (!categoryName) return;
-            if (categories.some(c => c.name.toLowerCase() === categoryName.toLowerCase())) {
-                alert('A category with this name already exists.');
-                return;
-            }
-            commit(cats => {
-                cats.push({ name: categoryName, items: [] });
-                newCategoryInput.value = '';
-            });
-        };
-        const deleteCategory = (categoryIndex) => {
-            if (!confirm(`Delete "${categories[categoryIndex].name}" category and all its contents?`)) return;
-            commit(cats => {
-                cats.splice(categoryIndex, 1);
-            });
-            clearSelection();
-        };
-        const copyStringToClipboard = (str, msg) => {
+        }
+        function copyStringToClipboard(str, msg) {
             navigator.clipboard.writeText(str).then(() => {
                 toast.textContent = msg;
                 toast.classList.remove('hidden');
                 setTimeout(() => toast.classList.add('hidden'), 2000);
             }).catch(err => console.error('Failed to copy: ', err));
-        };
-        const generateShareLink = () => {
+        }
+        function copySelectedTags() {
+             if (selectedTags.length === 0) return;
+            const textToCopy = selectedTags.map(t => t.fullValue).join(', ');
+            copyStringToClipboard(textToCopy, 'Copied tags!');
+        }
+        function generateShareLink() {
             const data = JSON.stringify(categories);
             const encoded = unicodeToBase64(data);
             const url = window.location.href.split('#')[0] + '#' + encoded;
@@ -397,33 +399,32 @@
             shareLinkContainer.classList.remove('hidden');
             shareLinkOutput.select();
             copyStringToClipboard(url, 'Share link copied!');
-        };
-        const initializeApp = () => {
+        }
+        function initializeApp() {
             const hash = window.location.hash.substring(1);
             if (hash) {
                 try {
-                    const decoded = base64ToUnicode(hash);
-                    categories = JSON.parse(decoded);
+                    categories = JSON.parse(base64ToUnicode(hash));
                     isReadOnly = true;
                     document.getElementById('add-category-section').style.display = 'none';
                     document.getElementById('share-section').style.display = 'none';
                     document.getElementById('subtitle').textContent = "Viewing a shared board. Select and copy tags.";
                 } catch (e) { loadDefaultData(); }
             } else { loadDefaultData(); }
-            commit(); // Initial render
+            commit(); 
             updateSelectionPreview();
-        };
-        const loadDefaultData = () => {
+        }
+        function loadDefaultData() {
              categories = JSON.parse(localStorage.getItem('tagboardCategories')) || [
                 { name: 'Clothing', items: [
                     { type: 'tag', value: 'CLOTHING' },
                     { type: 'subCategory', name: 'Pants', tags: ['Denim', 'Belt'] },
                     { type: 'subCategory', name: 'Skirts', tags: ['Mini', 'Slit'] }
-                ]},
-                { name: 'Sets', items: [ { type: 'tag', value: '➜ SET / ADDAMS / ADDISON' } ] },
-                { name: 'Bodies', items: [ { type: 'tag', value: '옺 LEGACY' }, { type: 'tag', value: '옺 REBORN' } ]}
+                ], isCollapsed: false},
+                { name: 'Sets', items: [ { type: 'tag', value: '➜ SET / ADDAMS / ADDISON' } ], isCollapsed: false },
+                { name: 'Bodies', items: [ { type: 'tag', value: '옺 LEGACY' }, { type: 'tag', value: '옺 REBORN' } ], isCollapsed: false }
             ];
-        };
+        }
 
         // Event Listeners
         addCategoryButton.addEventListener('click', addCategory);
@@ -447,18 +448,6 @@
             }
         });
         
-        // Add a minimal service worker file for Glitch PWA support
-        const sw_code = `
-            const CACHE_NAME = 'tagboard-v20-cache';
-            self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(['/']))) });
-            self.addEventListener('fetch', e => { e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))) });
-        `;
-        const sw_blob = new Blob([sw_code], {type: 'application/javascript'});
-        const sw_url = URL.createObjectURL(sw_blob);
-        if('serviceWorker' in navigator){
-             navigator.serviceWorker.register(sw_url).catch(e => console.error(e));
-        }
-
         initializeApp();
     </script>
 </body>
