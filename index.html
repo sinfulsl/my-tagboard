@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tagboard AI v25 (Full Hierarchy)</title>
+    <title>Tagboard AI v26 (Collapsible Sub-Categories)</title>
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#4f46e5"/>
     <meta name="description" content="A simple tool to manage and copy tags for your projects.">
@@ -27,11 +27,11 @@
         .delete-btn { transition: opacity 0.2s ease-in-out; }
         #selection-preview { white-space: pre-wrap; word-break: break-word; }
         .drag-handle, .category-header-title { cursor: grab; }
-        .item-wrapper { cursor: grab; }
+        .item-wrapper, .subcategory-header { cursor: grab; }
         .sortable-ghost { opacity: 0.4; background: #c7d2fe; }
         .sub-category { border-left: 3px solid #6366f1; }
         .collapsible-content {
-            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.3s ease-in-out;
+            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.3s ease-in-out, padding-bottom 0.3s ease-in-out;
             overflow: hidden;
         }
     </style>
@@ -78,7 +78,7 @@
     <script>
         // --- Service Worker Logic (for Glitch PWA) ---
         const serviceWorkerCode = `
-            const CACHE_NAME = 'tagboard-v22-cache';
+            const CACHE_NAME = 'tagboard-v26-cache';
             self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(['/']))) });
             self.addEventListener('fetch', e => { e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))) });
         `;
@@ -180,25 +180,43 @@
         
         function createSubCategoryElement(catIndex, subCatIndex) {
             const subCategory = categories[catIndex].items[subCatIndex];
+            const isSubCollapsed = subCategory.isCollapsed || false;
             const subCategoryCard = document.createElement('div');
             subCategoryCard.className = 'sub-category bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg ml-4 item-wrapper';
             subCategoryCard.dataset.id = `item-${catIndex}-${subCatIndex}`;
-
-            const tagsHtml = subCategory.tags.map((tag, tagIndex) => createTagElement(catIndex, subCatIndex, tagIndex).outerHTML).join('');
-
-            subCategoryCard.innerHTML = `
-                <div class="flex justify-between items-center mb-2">
-                    <h4 class="font-semibold text-lg text-gray-700 dark:text-gray-300">${subCategory.name}</h4>
-                     ${!isReadOnly ? `<button class="delete-btn text-red-500 hover:text-red-700 font-bold" onclick="deleteItem(${catIndex}, ${subCatIndex}, -1)">✕</button>` : ''}
+            
+            const chevronRotation = isSubCollapsed ? 'transform rotate-[-90deg]' : '';
+            const subCategoryHeader = `
+                <div class="flex justify-between items-center mb-2 subcategory-header" onclick="toggleSubCategoryCollapse(${catIndex}, ${subCatIndex})">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-gray-400 transition-transform ${chevronRotation}"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        <h4 class="font-semibold text-lg text-gray-700 dark:text-gray-300">${subCategory.name}</h4>
+                    </div>
+                     ${!isReadOnly ? `<button class="delete-btn text-red-500 hover:text-red-700 font-bold" onclick="event.stopPropagation(); deleteItem(${catIndex}, ${subCatIndex}, -1)">✕</button>` : ''}
                 </div>
-                <div class="flex flex-wrap gap-2">${tagsHtml}</div>
-                 ${!isReadOnly ? `
+            `;
+
+            const subCategoryBody = document.createElement('div');
+            subCategoryBody.className = `collapsible-content ${isSubCollapsed ? 'max-h-0 opacity-0' : 'max-h-[10000px] mt-2'}`;
+            
+            const tagsContainer = document.createElement('div');
+            tagsContainer.className = 'flex flex-wrap gap-2';
+            subCategory.tags.forEach((tag, tagIndex) => {
+                tagsContainer.appendChild(createTagElement(catIndex, subCatIndex, tagIndex));
+            });
+            subCategoryBody.appendChild(tagsContainer);
+
+            if (!isReadOnly) {
+                subCategoryBody.insertAdjacentHTML('beforeend', `
                  <div class="flex gap-2 pt-3 mt-3 border-t border-gray-200 dark:border-gray-700">
                     <input type="text" id="new-tag-input-${catIndex}-${subCatIndex}" class="flex-grow bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm" placeholder="Add tag to ${subCategory.name}...">
                     <button class="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-3 rounded-lg text-sm" onclick="addTagToSubCategory(${catIndex}, ${subCatIndex})">Add</button>
                 </div>
-                ` : ''}
-            `;
+                `);
+            }
+
+            subCategoryCard.innerHTML = subCategoryHeader;
+            subCategoryCard.appendChild(subCategoryBody);
             return subCategoryCard;
         }
 
@@ -297,6 +315,13 @@
                 cats[categoryIndex].isCollapsed = !cats[categoryIndex].isCollapsed;
             });
         }
+        
+        function toggleSubCategoryCollapse(catIndex, subCatIndex) {
+            commit(cats => {
+                const subCat = cats[catIndex].items[subCatIndex];
+                subCat.isCollapsed = !subCat.isCollapsed;
+            });
+        }
 
         function addCategory() {
             const categoryName = newCategoryInput.value.trim();
@@ -322,7 +347,7 @@
             const input = document.getElementById(`new-subcategory-input-${catIndex}`);
             const subCatName = input.value.trim();
             if(subCatName) commit(cats => {
-                cats[catIndex].items.push({ type: 'subCategory', name: subCatName, tags: [] });
+                cats[catIndex].items.push({ type: 'subCategory', name: subCatName, tags: [], isCollapsed: false });
                 input.value = '';
             });
         }
@@ -418,8 +443,8 @@
              categories = JSON.parse(localStorage.getItem('tagboardCategories')) || [
                 { name: 'Clothing', items: [
                     { type: 'tag', value: 'CLOTHING' },
-                    { type: 'subCategory', name: 'Pants', tags: ['Denim', 'Belt'] },
-                    { type: 'subCategory', name: 'Skirts', tags: ['Mini', 'Slit'] }
+                    { type: 'subCategory', name: 'Pants', tags: ['Denim', 'Belt'], isCollapsed: false },
+                    { type: 'subCategory', name: 'Skirts', tags: ['Mini', 'Slit'], isCollapsed: false }
                 ], isCollapsed: false},
                 { name: 'Sets', items: [ { type: 'tag', value: '➜ SET / ADDAMS / ADDISON' } ], isCollapsed: false },
                 { name: 'Bodies', items: [ { type: 'tag', value: '옺 LEGACY' }, { type: 'tag', value: '옺 REBORN' } ], isCollapsed: false }
