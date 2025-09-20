@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tagboard AI v26 (Collapsible Sub-Categories)</title>
+    <title>Tagboard AI v27 (Smart Categories)</title>
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#4f46e5"/>
     <meta name="description" content="A simple tool to manage and copy tags for your projects.">
@@ -78,7 +78,7 @@
     <script>
         // --- Service Worker Logic (for Glitch PWA) ---
         const serviceWorkerCode = `
-            const CACHE_NAME = 'tagboard-v26-cache';
+            const CACHE_NAME = 'tagboard-v27-cache';
             self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(['/']))) });
             self.addEventListener('fetch', e => { e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))) });
         `;
@@ -330,7 +330,13 @@
                 alert('A category with this name already exists.'); return;
             }
             commit(cats => {
-                cats.push({ name: categoryName, items: [], isCollapsed: false });
+                cats.push({ 
+                    name: categoryName, 
+                    items: [
+                        { type: 'tag', value: categoryName.toUpperCase() }
+                    ], 
+                    isCollapsed: false 
+                });
                 newCategoryInput.value = '';
             });
         }
