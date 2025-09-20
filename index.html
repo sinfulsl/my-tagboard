@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tagboard AI v27 (Smart Categories)</title>
+    <title>Tagboard AI v28 (Event Bubbling Fix)</title>
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#4f46e5"/>
     <meta name="description" content="A simple tool to manage and copy tags for your projects.">
@@ -78,7 +78,7 @@
     <script>
         // --- Service Worker Logic (for Glitch PWA) ---
         const serviceWorkerCode = `
-            const CACHE_NAME = 'tagboard-v27-cache';
+            const CACHE_NAME = 'tagboard-v28-cache';
             self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(['/']))) });
             self.addEventListener('fetch', e => { e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))) });
         `;
@@ -226,15 +226,15 @@
              const headerTitleContent = !isReadOnly
                 ? `<div id="category-title-view-${categoryIndex}" class="flex items-center gap-2">
                         <h3 class="text-2xl font-bold text-gray-900 dark:text-white">${category.name}</h3>
-                        <button class="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400" title="Rename Category" onclick="showCategoryEditView(${categoryIndex})">
+                        <button class="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400" title="Rename Category" onclick="event.stopPropagation(); showCategoryEditView(${categoryIndex})">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </button>
                     </div>
                     <div id="category-edit-view-${categoryIndex}" class="hidden w-full">
                         <div class="flex gap-2">
-                            <input type="text" id="category-edit-input-${categoryIndex}" value="${category.name}" class="flex-grow bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-lg font-bold">
-                            <button class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-3 rounded-lg" title="Save" onclick="saveCategoryName(${categoryIndex})">✓</button>
-                            <button class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-3 rounded-lg" title="Cancel" onclick="hideCategoryEditView(${categoryIndex})">✕</button>
+                            <input type="text" id="category-edit-input-${categoryIndex}" value="${category.name}" class="flex-grow bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-lg font-bold" onclick="event.stopPropagation();">
+                            <button class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-3 rounded-lg" title="Save" onclick="event.stopPropagation(); saveCategoryName(${categoryIndex})">✓</button>
+                            <button class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-3 rounded-lg" title="Cancel" onclick="event.stopPropagation(); hideCategoryEditView(${categoryIndex})">✕</button>
                         </div>
                     </div>`
                 : `<h3 class="text-2xl font-bold text-gray-900 dark:text-white">${category.name}</h3>`;
@@ -246,7 +246,7 @@
                         </div>
                         <div class="flex items-center gap-2">
                             ${!isReadOnly ? `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="drag-handle text-gray-400"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>` : ''}
-                            ${!isReadOnly ? `<button class="delete-btn bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full text-sm font-bold" onclick="deleteCategory(${categoryIndex})">✕</button>` : ''}
+                            ${!isReadOnly ? `<button class="delete-btn bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full text-sm font-bold" onclick="event.stopPropagation(); deleteCategory(${categoryIndex})">✕</button>` : ''}
                         </div>
                     </div>`;
         }
