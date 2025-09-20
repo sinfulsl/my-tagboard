@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tagboard AI v28 (Event Bubbling Fix)</title>
+    <title>Tagboard AI v32 (Theme Modal)</title>
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#4f46e5"/>
     <meta name="description" content="A simple tool to manage and copy tags for your projects.">
@@ -13,10 +13,36 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        :root {
+            --bg-color: #f3f4f6;
+            --title-color: #111827;
+            --button-color: #4f46e5;
+            --button-hover-color: #4338ca;
+            
+            --dark-bg-color: #111827;
+            --dark-title-color: #ffffff;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--bg-color);
+        }
+        .dark body {
+             background-color: var(--dark-bg-color);
+        }
+        h1 { color: var(--title-color); }
+        .dark h1 { color: var(--dark-title-color); }
+
+        .primary-button {
+            background-color: var(--button-color);
+        }
+        .primary-button:hover {
+            background-color: var(--button-hover-color);
+        }
+
         .tag-button, .category-card { transition: all 0.2s ease-in-out; }
         .tag-button:hover:not(.selected) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
-        .tag-button.selected { background-color: #4f46e5; color: white; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.5); }
+        .tag-button.selected { background-color: var(--button-color); color: white; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.5); }
         .copied-toast { animation: fadeInOut 2s forwards; }
         @keyframes fadeInOut {
             0% { opacity: 0; transform: translateY(20px); }
@@ -31,8 +57,27 @@
         .sortable-ghost { opacity: 0.4; background: #c7d2fe; }
         .sub-category { border-left: 3px solid #6366f1; }
         .collapsible-content {
-            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.3s ease-in-out, padding-bottom 0.3s ease-in-out;
+            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.3s ease-in-out, padding-bottom 0.3s ease-in-out, padding-top 0.3s ease-in-out;
             overflow: hidden;
+        }
+        input[type="color"] {
+            -webkit-appearance: none;
+            width: 44px;
+            height: 44px;
+            border: none;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+            border-radius: 50%;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: 2px solid #e5e7eb;
+            border-radius: 50%;
+        }
+        #theme-modal.hidden {
+            display: none;
         }
     </style>
 </head>
@@ -49,7 +94,7 @@
                 No tags selected.
              </div>
              <div class="flex gap-3">
-                <button id="copy-button" class="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-5 rounded-lg shadow transition">Copy Selected Tags</button>
+                <button id="copy-button" class="primary-button flex-grow text-white font-semibold py-3 px-5 rounded-lg shadow transition">Copy Selected Tags</button>
                 <button id="clear-button" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-5 rounded-lg shadow transition">Clear</button>
              </div>
         </div>
@@ -58,7 +103,7 @@
             <h2 class="text-xl font-semibold mb-3 text-gray-900 dark:text-white">Add New Top-Level Category</h2>
             <div class="flex gap-2">
                 <input type="text" id="new-category-input" class="flex-grow bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Enter new category name...">
-                <button id="add-category-button" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-5 rounded-lg shadow transition">Add Category</button>
+                <button id="add-category-button" class="primary-button text-white font-semibold py-3 px-5 rounded-lg shadow transition">Add Category</button>
             </div>
         </div>
         
@@ -66,9 +111,43 @@
 
         <div id="share-section" class="mt-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
              <h2 class="text-xl font-semibold mb-3 text-gray-900 dark:text-white">Share Your Board (Read-Only)</h2>
-            <button id="generate-share-link" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-5 rounded-lg shadow transition mb-4">Generate Share Link</button>
+            <button id="generate-share-link" class="primary-button bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-5 rounded-lg shadow transition mb-4">Generate Share Link</button>
             <div id="share-link-container" class="hidden">
                 <input type="text" id="share-link-output" readonly class="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-3">
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Theme Button -->
+    <button id="theme-button" class="fixed bottom-5 right-5 primary-button text-white w-16 h-16 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0L12 2.69z"></path><circle cx="12" cy="8.5" r="1.5"></circle><circle cx="8.5" cy="12" r="1.5"></circle><circle cx="15.5" cy="12" r="1.5"></circle></svg>
+    </button>
+
+    <!-- Theme Customization Modal -->
+    <div id="theme-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Customize Appearance</h2>
+                <button id="close-theme-modal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="flex flex-col items-center gap-2">
+                    <label for="bg-color-picker" class="font-medium text-gray-700 dark:text-gray-300">Background</label>
+                    <input type="color" id="bg-color-picker">
+                </div>
+                <div class="flex flex-col items-center gap-2">
+                    <label for="title-color-picker" class="font-medium text-gray-700 dark:text-gray-300">Title Text</label>
+                    <input type="color" id="title-color-picker">
+                </div>
+                <div class="flex flex-col items-center gap-2">
+                    <label for="button-color-picker" class="font-medium text-gray-700 dark:text-gray-300">Buttons</label>
+                    <input type="color" id="button-color-picker">
+                </div>
+            </div>
+            <div class="mt-8 flex justify-center">
+                 <button id="reset-theme-button" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition">Reset to Defaults</button>
             </div>
         </div>
     </div>
@@ -78,7 +157,7 @@
     <script>
         // --- Service Worker Logic (for Glitch PWA) ---
         const serviceWorkerCode = `
-            const CACHE_NAME = 'tagboard-v28-cache';
+            const CACHE_NAME = 'tagboard-v31-cache';
             self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(['/']))) });
             self.addEventListener('fetch', e => { e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))) });
         `;
@@ -100,11 +179,21 @@
         const generateShareLinkBtn = document.getElementById('generate-share-link');
         const shareLinkContainer = document.getElementById('share-link-container');
         const shareLinkOutput = document.getElementById('share-link-output');
+        
+        // Theme elements
+        const themeButton = document.getElementById('theme-button');
+        const themeModal = document.getElementById('theme-modal');
+        const closeThemeModal = document.getElementById('close-theme-modal');
+        const bgColorPicker = document.getElementById('bg-color-picker');
+        const titleColorPicker = document.getElementById('title-color-picker');
+        const buttonColorPicker = document.getElementById('button-color-picker');
+        const resetThemeButton = document.getElementById('reset-theme-button');
 
         let isReadOnly = false;
         let selectedTags = [];
         let categories = [];
         let sortableInstances = [];
+        let theme = {};
 
         function unicodeToBase64(str) { return btoa(unescape(encodeURIComponent(str))); }
         function base64ToUnicode(str) { return decodeURIComponent(escape(atob(str))); }
@@ -169,11 +258,11 @@
             
             wrapper.innerHTML = `
                 <button class="tag-button ${isSelected ? 'selected' : ''} bg-gray-200 dark:bg-gray-700 text-indigo-800 dark:text-indigo-200 font-medium py-2 px-4 rounded-lg" 
-                        onclick="toggleTagSelection(${catIndex}, ${subCatIndex}, ${itemIndex}, this)">
+                        onclick="toggleTagSelection(event, ${catIndex}, ${subCatIndex}, ${itemIndex}, this)">
                     ${tagValue}
                 </button>
                 ${!isReadOnly ? `<button class="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 delete-btn" 
-                                        onclick="deleteItem(${catIndex}, ${subCatIndex}, ${itemIndex})">x</button>` : ''}
+                                        onclick="deleteItem(event, ${catIndex}, ${subCatIndex}, ${itemIndex})">x</button>` : ''}
             `;
             return wrapper;
         }
@@ -186,13 +275,30 @@
             subCategoryCard.dataset.id = `item-${catIndex}-${subCatIndex}`;
             
             const chevronRotation = isSubCollapsed ? 'transform rotate-[-90deg]' : '';
-            const subCategoryHeader = `
-                <div class="flex justify-between items-center mb-2 subcategory-header" onclick="toggleSubCategoryCollapse(${catIndex}, ${subCatIndex})">
-                    <div class="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-gray-400 transition-transform ${chevronRotation}"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            
+            const subCategoryHeaderContent = !isReadOnly
+                ? `<div id="subcategory-title-view-${catIndex}-${subCatIndex}" class="flex items-center gap-2">
                         <h4 class="font-semibold text-lg text-gray-700 dark:text-gray-300">${subCategory.name}</h4>
+                        <button class="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400" title="Rename Sub-Category" onclick="showSubCategoryEditView(event, ${catIndex}, ${subCatIndex})">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        </button>
                     </div>
-                     ${!isReadOnly ? `<button class="delete-btn text-red-500 hover:text-red-700 font-bold" onclick="event.stopPropagation(); deleteItem(${catIndex}, ${subCatIndex}, -1)">✕</button>` : ''}
+                    <div id="subcategory-edit-view-${catIndex}-${subCatIndex}" class="hidden w-full">
+                        <div class="flex gap-2">
+                           <input type="text" id="subcategory-edit-input-${catIndex}-${subCatIndex}" value="${subCategory.name}" class="flex-grow bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-1 text-lg font-semibold" onclick="event.stopPropagation();">
+                           <button class="bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-2 rounded-lg text-sm" title="Save" onclick="saveSubCategoryName(event, ${catIndex}, ${subCatIndex})">✓</button>
+                           <button class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-1 px-2 rounded-lg text-sm" title="Cancel" onclick="hideSubCategoryEditView(event, ${catIndex}, ${subCatIndex})">✕</button>
+                        </div>
+                    </div>`
+                : `<h4 class="font-semibold text-lg text-gray-700 dark:text-gray-300">${subCategory.name}</h4>`;
+                
+            const subCategoryHeader = `
+                <div class="flex justify-between items-center mb-2 subcategory-header" onclick="toggleSubCategoryCollapse(event, ${catIndex}, ${subCatIndex})">
+                    <div class="flex items-center gap-2 flex-grow">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-gray-400 transition-transform ${chevronRotation}"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        <div class="w-full">${subCategoryHeaderContent}</div>
+                    </div>
+                     ${!isReadOnly ? `<button class="delete-btn text-red-500 hover:text-red-700 font-bold" onclick="deleteItem(event, ${catIndex}, ${subCatIndex}, -1)">✕</button>` : ''}
                 </div>
             `;
 
@@ -210,7 +316,7 @@
                 subCategoryBody.insertAdjacentHTML('beforeend', `
                  <div class="flex gap-2 pt-3 mt-3 border-t border-gray-200 dark:border-gray-700">
                     <input type="text" id="new-tag-input-${catIndex}-${subCatIndex}" class="flex-grow bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm" placeholder="Add tag to ${subCategory.name}...">
-                    <button class="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-3 rounded-lg text-sm" onclick="addTagToSubCategory(${catIndex}, ${subCatIndex})">Add</button>
+                    <button class="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-3 rounded-lg text-sm primary-button" onclick="addTagToSubCategory(event, ${catIndex}, ${subCatIndex})">Add</button>
                 </div>
                 `);
             }
@@ -226,27 +332,27 @@
              const headerTitleContent = !isReadOnly
                 ? `<div id="category-title-view-${categoryIndex}" class="flex items-center gap-2">
                         <h3 class="text-2xl font-bold text-gray-900 dark:text-white">${category.name}</h3>
-                        <button class="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400" title="Rename Category" onclick="event.stopPropagation(); showCategoryEditView(${categoryIndex})">
+                        <button class="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400" title="Rename Category" onclick="showCategoryEditView(event, ${categoryIndex})">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </button>
                     </div>
                     <div id="category-edit-view-${categoryIndex}" class="hidden w-full">
                         <div class="flex gap-2">
                             <input type="text" id="category-edit-input-${categoryIndex}" value="${category.name}" class="flex-grow bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-lg font-bold" onclick="event.stopPropagation();">
-                            <button class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-3 rounded-lg" title="Save" onclick="event.stopPropagation(); saveCategoryName(${categoryIndex})">✓</button>
-                            <button class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-3 rounded-lg" title="Cancel" onclick="event.stopPropagation(); hideCategoryEditView(${categoryIndex})">✕</button>
+                            <button class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-3 rounded-lg" title="Save" onclick="saveCategoryName(event, ${categoryIndex})">✓</button>
+                            <button class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-3 rounded-lg" title="Cancel" onclick="hideCategoryEditView(event, ${categoryIndex})">✕</button>
                         </div>
                     </div>`
                 : `<h3 class="text-2xl font-bold text-gray-900 dark:text-white">${category.name}</h3>`;
 
             return `<div class="flex justify-between items-center mb-0">
-                        <div class="flex items-center gap-2 flex-grow category-header-title" onclick="toggleCategoryCollapse(${categoryIndex})">
+                        <div class="flex items-center gap-2 flex-grow category-header-title" onclick="toggleCategoryCollapse(event, ${categoryIndex})">
                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-gray-400 transition-transform ${chevronRotation}"><polyline points="6 9 12 15 18 9"></polyline></svg>
                              <div class="w-full">${headerTitleContent}</div>
                         </div>
                         <div class="flex items-center gap-2">
                             ${!isReadOnly ? `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="drag-handle text-gray-400"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>` : ''}
-                            ${!isReadOnly ? `<button class="delete-btn bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full text-sm font-bold" onclick="event.stopPropagation(); deleteCategory(${categoryIndex})">✕</button>` : ''}
+                            ${!isReadOnly ? `<button class="delete-btn bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full text-sm font-bold" onclick="deleteCategory(event, ${categoryIndex})">✕</button>` : ''}
                         </div>
                     </div>`;
         }
@@ -255,14 +361,16 @@
             return `<div class="pt-4 border-t border-gray-200 dark:border-gray-700 mt-4 space-y-3">
                         <div class="flex gap-2">
                             <input type="text" id="new-tag-input-${categoryIndex}" class="flex-grow bg-gray-50 dark:bg-gray-700 border rounded-lg p-2" placeholder="Add a top-level tag...">
-                            <button class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg" onclick="addTagToCategory(${categoryIndex})">Add Tag</button>
+                            <button class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg" onclick="addTagToCategory(event, ${categoryIndex})">Add Tag</button>
                         </div>
                         <div class="flex gap-2">
                              <input type="text" id="new-subcategory-input-${categoryIndex}" class="flex-grow bg-gray-50 dark:bg-gray-700 border rounded-lg p-2" placeholder="Add a new sub-category...">
-                            <button class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg" onclick="addSubCategory(${categoryIndex})">Add Sub-Category</button>
+                            <button class="primary-button text-white font-semibold py-2 px-4 rounded-lg" onclick="addSubCategory(event, ${categoryIndex})">Add Sub-Category</button>
                         </div>
                     </div>`;
         }
+        
+        // --- All other functions ---
         
         function initSortable() {
             if (isReadOnly) return;
@@ -296,7 +404,8 @@
             return tagValue;
         }
         
-        function toggleTagSelection(catIndex, subCatIndex, itemIndex, buttonElement) {
+        function toggleTagSelection(event, catIndex, subCatIndex, itemIndex, buttonElement) {
+            event.stopPropagation();
             const tagValue = (subCatIndex > -1) ? categories[catIndex].items[subCatIndex].tags[itemIndex] : categories[catIndex].items[itemIndex].value;
             const fullValue = getFullTagValue(catIndex, subCatIndex, tagValue);
             const tagIndexInSelection = selectedTags.findIndex(st => st.fullValue === fullValue);
@@ -310,20 +419,23 @@
             updateSelectionPreview();
         }
 
-        function toggleCategoryCollapse(categoryIndex) {
+        function toggleCategoryCollapse(event, categoryIndex) {
+             event.stopPropagation();
             commit(cats => {
                 cats[categoryIndex].isCollapsed = !cats[categoryIndex].isCollapsed;
             });
         }
         
-        function toggleSubCategoryCollapse(catIndex, subCatIndex) {
+        function toggleSubCategoryCollapse(event, catIndex, subCatIndex) {
+            event.stopPropagation();
             commit(cats => {
                 const subCat = cats[catIndex].items[subCatIndex];
                 subCat.isCollapsed = !subCat.isCollapsed;
             });
         }
 
-        function addCategory() {
+        function addCategory(event) {
+            event.stopPropagation();
             const categoryName = newCategoryInput.value.trim();
             if (!categoryName) return;
             if (categories.some(c => c.name.toLowerCase() === categoryName.toLowerCase())) {
@@ -341,7 +453,8 @@
             });
         }
 
-        function addTagToCategory(catIndex) {
+        function addTagToCategory(event, catIndex) {
+            event.stopPropagation();
             const input = document.getElementById(`new-tag-input-${catIndex}`);
             const tagValue = input.value.trim();
             if(tagValue) commit(cats => {
@@ -349,7 +462,8 @@
                 input.value = '';
             });
         }
-        function addSubCategory(catIndex) {
+        function addSubCategory(event, catIndex) {
+            event.stopPropagation();
             const input = document.getElementById(`new-subcategory-input-${catIndex}`);
             const subCatName = input.value.trim();
             if(subCatName) commit(cats => {
@@ -357,7 +471,8 @@
                 input.value = '';
             });
         }
-        function addTagToSubCategory(catIndex, subCatIndex) {
+        function addTagToSubCategory(event, catIndex, subCatIndex) {
+            event.stopPropagation();
             const input = document.getElementById(`new-tag-input-${catIndex}-${subCatIndex}`);
             const tagValue = input.value.trim();
             if(tagValue) commit(cats => {
@@ -365,10 +480,11 @@
                 input.value = '';
             });
         }
-        function deleteItem(catIndex, subCatIndex, itemIndex) {
-            if (subCatIndex > -1 && itemIndex > -1) { // It's a tag within a sub-category
+        function deleteItem(event, catIndex, subCatIndex, itemIndex) {
+            event.stopPropagation();
+            if (subCatIndex > -1 && itemIndex > -1) { 
                 commit(cats => cats[catIndex].items[subCatIndex].tags.splice(itemIndex, 1));
-            } else { // It's a top-level item (tag or sub-category)
+            } else { 
                 const realItemIndex = subCatIndex > -1 ? subCatIndex : itemIndex;
                 const item = categories[catIndex].items[realItemIndex];
                 if (item.type === 'subCategory' && !confirm(`Delete sub-category "${item.name}" and all its tags?`)) return;
@@ -376,7 +492,8 @@
             }
             clearSelection();
         }
-        function saveCategoryName(categoryIndex) {
+        function saveCategoryName(event, categoryIndex) {
+            event.stopPropagation();
             const input = document.getElementById(`category-edit-input-${categoryIndex}`);
             const newName = input.value.trim();
             if (newName && newName !== categories[categoryIndex].name) {
@@ -384,9 +501,32 @@
                     alert('A category with this name already exists.'); return;
                 }
                 commit(cats => { cats[categoryIndex].name = newName; });
-            } else { hideCategoryEditView(categoryIndex); }
+            } else { hideCategoryEditView(event, categoryIndex); }
         }
-        function deleteCategory(categoryIndex) {
+
+        function showSubCategoryEditView(event, catIndex, subCatIndex) {
+            event.stopPropagation();
+            document.getElementById(`subcategory-title-view-${catIndex}-${subCatIndex}`).classList.add('hidden');
+            document.getElementById(`subcategory-edit-view-${catIndex}-${subCatIndex}`).classList.remove('hidden');
+            const input = document.getElementById(`subcategory-edit-input-${catIndex}-${subCatIndex}`);
+            input.focus(); input.select();
+        }
+        function hideSubCategoryEditView(event, catIndex, subCatIndex) {
+            event.stopPropagation();
+            document.getElementById(`subcategory-title-view-${catIndex}-${subCatIndex}`).classList.remove('hidden');
+            document.getElementById(`subcategory-edit-view-${catIndex}-${subCatIndex}`).classList.add('hidden');
+        }
+        function saveSubCategoryName(event, catIndex, subCatIndex) {
+            event.stopPropagation();
+            const input = document.getElementById(`subcategory-edit-input-${catIndex}-${subCatIndex}`);
+            const newName = input.value.trim();
+            if (newName && newName !== categories[catIndex].items[subCatIndex].name) {
+                 commit(cats => { cats[catIndex].items[subCatIndex].name = newName; });
+            } else { hideSubCategoryEditView(event, catIndex, subCatIndex); }
+        }
+
+        function deleteCategory(event, categoryIndex) {
+            event.stopPropagation();
             if (!confirm(`Delete "${categories[categoryIndex].name}" category and all its contents?`)) return;
             commit(cats => cats.splice(categoryIndex, 1));
             clearSelection();
@@ -397,16 +537,17 @@
         }
         function clearSelection() {
             selectedTags = [];
-            render(); // Re-render to deselect buttons
+            render(); 
             updateSelectionPreview();
         }
-        function showCategoryEditView(categoryIndex) {
+        function showCategoryEditView(event, categoryIndex) {
+            event.stopPropagation();
             document.getElementById(`category-title-view-${categoryIndex}`).classList.add('hidden');
             document.getElementById(`category-edit-view-${categoryIndex}`).classList.remove('hidden');
             const input = document.getElementById(`category-edit-input-${categoryIndex}`);
             input.focus(); input.select();
         }
-        function hideCategoryEditView(categoryIndex) {
+        function hideCategoryEditView(event, categoryIndex) {
             document.getElementById(`category-title-view-${categoryIndex}`).classList.remove('hidden');
             document.getElementById(`category-edit-view-${categoryIndex}`).classList.add('hidden');
         }
@@ -431,6 +572,33 @@
             shareLinkOutput.select();
             copyStringToClipboard(url, 'Share link copied!');
         }
+        
+        function applyTheme(theme) {
+            const root = document.documentElement;
+            root.style.setProperty('--bg-color', theme.background);
+            root.style.setProperty('--dark-bg-color', theme.background); 
+            root.style.setProperty('--title-color', theme.title);
+            root.style.setProperty('--dark-title-color', theme.title);
+            root.style.setProperty('--button-color', theme.button);
+            
+            let r = parseInt(theme.button.slice(1, 3), 16);
+            let g = parseInt(theme.button.slice(3, 5), 16);
+            let b = parseInt(theme.button.slice(5, 7), 16);
+            r = Math.max(0, r - 20);
+            g = Math.max(0, g - 20);
+            b = Math.max(0, b - 20);
+            const hoverColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+            root.style.setProperty('--button-hover-color', hoverColor);
+
+            bgColorPicker.value = theme.background;
+            titleColorPicker.value = theme.title;
+            buttonColorPicker.value = theme.button;
+        }
+
+        function saveTheme() {
+            localStorage.setItem('tagboardTheme', JSON.stringify(theme));
+        }
+        
         function initializeApp() {
             const hash = window.location.hash.substring(1);
             if (hash) {
@@ -439,9 +607,18 @@
                     isReadOnly = true;
                     document.getElementById('add-category-section').style.display = 'none';
                     document.getElementById('share-section').style.display = 'none';
+                    document.getElementById('theme-button').style.display = 'none';
                     document.getElementById('subtitle').textContent = "Viewing a shared board. Select and copy tags.";
                 } catch (e) { loadDefaultData(); }
             } else { loadDefaultData(); }
+            
+            theme = JSON.parse(localStorage.getItem('tagboardTheme')) || {
+                background: '#f3f4f6',
+                title: '#111827',
+                button: '#4f46e5'
+            };
+            applyTheme(theme);
+
             commit(); 
             updateSelectionPreview();
         }
@@ -459,22 +636,41 @@
 
         // Event Listeners
         addCategoryButton.addEventListener('click', addCategory);
-        newCategoryInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') addCategory(); });
+        newCategoryInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') addCategory(e); });
         copyButton.addEventListener('click', copySelectedTags);
         clearButton.addEventListener('click', clearSelection);
         generateShareLinkBtn.addEventListener('click', generateShareLink);
+        
+        themeButton.addEventListener('click', () => themeModal.classList.remove('hidden'));
+        closeThemeModal.addEventListener('click', () => themeModal.classList.add('hidden'));
+        themeModal.addEventListener('click', (e) => {
+            if (e.target === themeModal) {
+                themeModal.classList.add('hidden');
+            }
+        });
+
+        bgColorPicker.addEventListener('input', (e) => { theme.background = e.target.value; applyTheme(theme); saveTheme(); });
+        titleColorPicker.addEventListener('input', (e) => { theme.title = e.target.value; applyTheme(theme); saveTheme(); });
+        buttonColorPicker.addEventListener('input', (e) => { theme.button = e.target.value; applyTheme(theme); saveTheme(); });
+        resetThemeButton.addEventListener('click', () => {
+            localStorage.removeItem('tagboardTheme');
+            location.reload();
+        });
         
         categoryContainer.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 const targetId = e.target.id;
                 if (targetId.startsWith('new-tag-input-')) {
                     const parts = targetId.split('-');
-                    if (parts.length === 4) addTagToCategory(parseInt(parts[3]));
-                    else addTagToSubCategory(parseInt(parts[3]), parseInt(parts[4]));
+                    if (parts.length === 4) addTagToCategory(e, parseInt(parts[3]));
+                    else addTagToSubCategory(e, parseInt(parts[3]), parseInt(parts[4]));
                 } else if (targetId.startsWith('new-subcategory-input-')) {
-                    addSubCategory(parseInt(targetId.split('-')[3]));
+                    addSubCategory(e, parseInt(targetId.split('-')[3]));
                 } else if (targetId.startsWith('category-edit-input-')) {
-                    saveCategoryName(parseInt(targetId.split('-')[3]));
+                    saveCategoryName(e, parseInt(targetId.split('-')[3]));
+                } else if (targetId.startsWith('subcategory-edit-input-')) {
+                    const parts = targetId.split('-');
+                    saveSubCategoryName(e, parseInt(parts[3]), parseInt(parts[4]));
                 }
             }
         });
