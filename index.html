@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tagboard AI v35 (Neutral Theme UI)</title>
+    <title>Tagboard AI v37 (Focus Fix)</title>
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#4f46e5"/>
     <meta name="description" content="A simple tool to manage and copy tags for your projects.">
@@ -208,11 +208,13 @@
         let categories = [];
         let sortableInstances = [];
         let theme = {};
+        let elementToFocusId = null; // NEW: Global variable to track focus
 
         function unicodeToBase64(str) { return btoa(unescape(encodeURIComponent(str))); }
         function base64ToUnicode(str) { return decodeURIComponent(escape(atob(str))); }
 
-        function commit(callback) {
+        function commit(callback, focusId = null) {
+            elementToFocusId = focusId; // Set the ID of the element to focus after render
             if (callback) { callback(categories); }
             if (!isReadOnly) {
                 localStorage.setItem('tagboardCategories', JSON.stringify(categories));
@@ -258,7 +260,17 @@
                 categoryContainer.appendChild(categoryCard);
             });
             
-            initSortable();
+            setTimeout(() => {
+                initSortable();
+                if (elementToFocusId) {
+                    const el = document.getElementById(elementToFocusId);
+                    if (el) {
+                        el.focus();
+                        el.select();
+                    }
+                    elementToFocusId = null; // Reset after use
+                }
+            }, 0);
         }
         
         function createTagElement(catIndex, subCatIndex, itemIndex) {
@@ -455,6 +467,7 @@
             if (categories.some(c => c.name.toLowerCase() === categoryName.toLowerCase())) {
                 alert('A category with this name already exists.'); return;
             }
+            const inputId = 'new-category-input';
             commit(cats => {
                 cats.push({ 
                     name: categoryName, 
@@ -463,36 +476,39 @@
                     ], 
                     isCollapsed: false 
                 });
-                newCategoryInput.value = '';
-            });
+                document.getElementById(inputId).value = '';
+            }, inputId);
         }
 
         function addTagToCategory(event, catIndex) {
             event.stopPropagation();
-            const input = document.getElementById(`new-tag-input-${catIndex}`);
+            const inputId = `new-tag-input-${catIndex}`;
+            const input = document.getElementById(inputId);
             const tagValue = input.value.trim();
             if(tagValue) commit(cats => {
                 cats[catIndex].items.push({ type: 'tag', value: tagValue });
                 input.value = '';
-            });
+            }, inputId);
         }
         function addSubCategory(event, catIndex) {
             event.stopPropagation();
-            const input = document.getElementById(`new-subcategory-input-${catIndex}`);
+            const inputId = `new-subcategory-input-${catIndex}`;
+            const input = document.getElementById(inputId);
             const subCatName = input.value.trim();
             if(subCatName) commit(cats => {
                 cats[catIndex].items.push({ type: 'subCategory', name: subCatName, tags: [], isCollapsed: false });
                 input.value = '';
-            });
+            }, inputId);
         }
         function addTagToSubCategory(event, catIndex, subCatIndex) {
             event.stopPropagation();
-            const input = document.getElementById(`new-tag-input-${catIndex}-${subCatIndex}`);
+            const inputId = `new-tag-input-${catIndex}-${subCatIndex}`;
+            const input = document.getElementById(inputId);
             const tagValue = input.value.trim();
             if(tagValue) commit(cats => {
                 cats[catIndex].items[subCatIndex].tags.push(tagValue);
                 input.value = '';
-            });
+            }, inputId);
         }
         function deleteItem(event, catIndex, subCatIndex, itemIndex) {
             event.stopPropagation();
